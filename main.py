@@ -10,6 +10,10 @@ from src.config import (
 
 
 def initialize_project():
+    """
+    Create the required project directories
+    if they do not already exist.
+    """
 
     directories = [
         RAW_DATA_DIR,
@@ -18,16 +22,38 @@ def initialize_project():
         REPORT_DIR
     ]
 
-    for directory in directories:
-        directory.mkdir(parents=True, exist_ok=True)
+    print(f"\nInitializing {PROJECT_NAME}...")
+    print(f"Version: {PROJECT_VERSION}")
 
-    print(f"\n{PROJECT_NAME} v{PROJECT_VERSION}")
-    print("Project initialized successfully!")
-
-    print("\nProject directories:")
     for directory in directories:
-        print(f"- {directory}")
+        directory.mkdir(
+            parents=True,
+            exist_ok=True
+        )
+        print(f"Created/verified: {directory}")
+
+    print("\nProject initialized successfully!")
+
+
+def display_project_info():
+    """
+    Display basic TerraSpectra project information.
+    """
+
+    print("\n========== PROJECT INFORMATION ==========")
+    print(f"Project Name    : {PROJECT_NAME}")
+    print(f"Project Version : {PROJECT_VERSION}")
+    print(f"Raw Data        : {RAW_DATA_DIR}")
+    print(f"Processed Data  : {PROCESSED_DATA_DIR}")
+    print(f"Models          : {MODEL_DIR}")
+    print(f"Reports         : {REPORT_DIR}")
+    print("=========================================")
+
+
+def main():
+    initialize_project()
+    display_project_info()
 
 
 if __name__ == "__main__":
-    initialize_project()
+    main()

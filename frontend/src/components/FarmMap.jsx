@@ -5,9 +5,15 @@ import Map from "react-map-gl/maplibre";
 import { DeckGL } from "@deck.gl/react";
 import { GeoJsonLayer } from "@deck.gl/layers";
 
+import { setWorkerUrl } from "maplibre-gl";
+import maplibreWorker from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
+
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import { farmGeoJSON } from "../data/mockFarmData";
+
+// Configure MapLibre worker for Vite
+setWorkerUrl(maplibreWorker);
 
 const INITIAL_VIEW_STATE = {
   longitude: 78.01,

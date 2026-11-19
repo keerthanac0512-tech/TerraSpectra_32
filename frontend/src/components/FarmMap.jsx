@@ -1,18 +1,13 @@
 
 import { useMemo, useRef, useState } from "react";
-import Map from "react-map-gl/maplibre";
+import Map from "react-map-gl/mapbox";
 
 import { DeckGL } from "@deck.gl/react";
 import { GeoJsonLayer, ScatterplotLayer } from "@deck.gl/layers";
 
-import { setWorkerUrl } from "maplibre-gl";
-import maplibreWorker from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
-
-import "maplibre-gl/dist/maplibre-gl.css";
+import "mapbox-gl/dist/mapbox-gl.css";
 
 import { farmGeoJSON } from "../data/mockFarmData";
-
-setWorkerUrl(maplibreWorker);
 
 const INITIAL_VIEW_STATE = {
   longitude: 78.01,
@@ -22,7 +17,7 @@ const INITIAL_VIEW_STATE = {
   bearing: 0
 };
 
-// Check whether a screen point is inside the farm polygon
+// Check whether a point is inside the farm polygon
 function isPointInsidePolygon(point, polygon) {
   const [x, y] = point;
   let inside = false;
@@ -58,7 +53,6 @@ function FarmMap() {
 
   const ring = farmData.features[0].geometry.coordinates[0];
 
-  // Build the editable map layers
   const layers = useMemo(() => {
     const currentRing =
       farmData.features[0].geometry.coordinates[0];
@@ -129,7 +123,6 @@ function FarmMap() {
         return [point.x, point.y];
       });
 
-    // Check whether a corner was selected
     const vertexIndex = projectedVertices.findIndex(([x, y]) => {
       const distance = Math.hypot(
         pixel[0] - x,
@@ -190,7 +183,6 @@ function FarmMap() {
 
       newRing[index] = [current.lng, current.lat];
 
-      // Keep the polygon closed
       if (index === 0) {
         newRing[newRing.length - 1] = [
           current.lng,
@@ -214,24 +206,20 @@ function FarmMap() {
       }
     }
 
-    setFarmData(previous => {
-      const updated = {
-        ...previous,
-        features: previous.features.map((feature, index) =>
-          index === 0
-            ? {
-                ...feature,
-                geometry: {
-                  ...feature.geometry,
-                  coordinates: [newRing]
-                }
+    setFarmData(previous => ({
+      ...previous,
+      features: previous.features.map((feature, index) =>
+        index === 0
+          ? {
+              ...feature,
+              geometry: {
+                ...feature.geometry,
+                coordinates: [newRing]
               }
-            : feature
-        )
-      };
-
-      return updated;
-    });
+            }
+          : feature
+      )
+    }));
   }
 
   function handlePointerUp(event) {
@@ -279,7 +267,8 @@ function FarmMap() {
       >
         <Map
           ref={mapRef}
-          mapStyle="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
+          mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
+          mapStyle="mapbox://styles/mapbox/streets-v12"
           dragPan={!isDragging}
           style={{
             width: "100%",

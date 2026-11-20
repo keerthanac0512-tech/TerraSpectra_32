@@ -12,7 +12,10 @@
   "dependencies": {
     "@deck.gl/layers": "^9.4.1",
     "@deck.gl/react": "^9.4.1",
+    "@turf/area": "^7.4.0",
+    "@turf/helpers": "^7.4.0",
     "deck.gl": "^9.4.1",
+    "mapbox-gl": "^3.35.1",
     "maplibre-gl": "^6.18.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

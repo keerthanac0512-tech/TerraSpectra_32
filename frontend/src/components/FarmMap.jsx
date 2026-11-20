@@ -1,13 +1,15 @@
 
 import { useMemo, useRef, useState } from "react";
+
 import Map from "react-map-gl/mapbox";
 
 import { DeckGL } from "@deck.gl/react";
 import { GeoJsonLayer, ScatterplotLayer } from "@deck.gl/layers";
 
-import "mapbox-gl/dist/mapbox-gl.css";
+import { area } from "@turf/area";
+import { polygon } from "@turf/helpers";
 
-import { farmGeoJSON } from "../data/mockFarmData";
+import "mapbox-gl/dist/mapbox-gl.css";
 
 const INITIAL_VIEW_STATE = {
   longitude: 78.01,
@@ -18,41 +20,55 @@ const INITIAL_VIEW_STATE = {
 };
 
 // Check whether a point is inside the farm polygon
-function isPointInsidePolygon(point, polygon) {
+function isPointInsidePolygon(point, polygonPoints) {
   const [x, y] = point;
   let inside = false;
 
   for (
-    let i = 0, j = polygon.length - 1;
-    i < polygon.length;
+    let i = 0, j = polygonPoints.length - 1;
+    i < polygonPoints.length;
     j = i++
   ) {
-    const [xi, yi] = polygon[i];
-    const [xj, yj] = polygon[j];
+    const [xi, yi] = polygonPoints[i];
+    const [xj, yj] = polygonPoints[j];
 
     const intersects =
       yi > y !== yj > y &&
       x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
 
-    if (intersects) inside = !inside;
+    if (intersects) {
+      inside = !inside;
+    }
   }
 
   return inside;
 }
 
-function FarmMap() {
+function FarmMap({ farmData, setFarmData }) {
   const mapRef = useRef(null);
   const dragRef = useRef(null);
 
-  const [farmData, setFarmData] = useState(() =>
-    JSON.parse(JSON.stringify(farmGeoJSON))
-  );
-
-  const [selectedFarm, setSelectedFarm] = useState(null);
+  const [selectedFarm, setSelectedFarm] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
+  // Current farm boundary
   const ring = farmData.features[0].geometry.coordinates[0];
 
+  // Calculate farm area in acres
+  const acreage = area(polygon([ring])) / 4046.8564224;
+
+  // Calculate approximate center coordinates
+  const coordinates = ring.slice(0, -1);
+
+  const centerLatitude =
+    coordinates.reduce((sum, point) => sum + point[1], 0) /
+    coordinates.length;
+
+  const centerLongitude =
+    coordinates.reduce((sum, point) => sum + point[0], 0) /
+    coordinates.length;
+
+  // Create Deck.gl layers
   const layers = useMemo(() => {
     const currentRing =
       farmData.features[0].geometry.coordinates[0];
@@ -92,6 +108,7 @@ function FarmMap() {
     ];
   }, [farmData]);
 
+  // Get mouse position relative to the map
   function getMapCoordinates(event) {
     const map = mapRef.current?.getMap();
 
@@ -108,10 +125,12 @@ function FarmMap() {
     };
   }
 
+  // Start moving the farm or resizing a corner
   function handlePointerDown(event) {
     if (event.button !== 0) return;
 
     const result = getMapCoordinates(event);
+
     if (!result) return;
 
     const { map, pixel } = result;
@@ -120,9 +139,11 @@ function FarmMap() {
       .slice(0, -1)
       .map(position => {
         const point = map.project(position);
+
         return [point.x, point.y];
       });
 
+    // Check if a corner handle was selected
     const vertexIndex = projectedVertices.findIndex(([x, y]) => {
       const distance = Math.hypot(
         pixel[0] - x,
@@ -135,14 +156,19 @@ function FarmMap() {
     const clickedCoordinate = map.unproject(pixel);
 
     if (vertexIndex !== -1) {
+
+      // Resize individual corner
       dragRef.current = {
         type: "vertex",
         vertexIndex,
         originalRing: ring.map(position => [...position])
       };
+
     } else if (
       isPointInsidePolygon(pixel, projectedVertices)
     ) {
+
+      // Move entire farm
       dragRef.current = {
         type: "polygon",
         startCoordinate: [
@@ -152,46 +178,60 @@ function FarmMap() {
         originalRing: ring.map(position => [...position])
       };
 
-      setSelectedFarm(farmData.features[0].properties);
+      setSelectedFarm(true);
+
     } else {
       return;
     }
 
     map.dragPan.disable();
+
     setIsDragging(true);
 
     event.currentTarget.setPointerCapture(event.pointerId);
+
     event.preventDefault();
   }
 
+  // Update farm boundary while dragging
   function handlePointerMove(event) {
     if (!dragRef.current) return;
 
     const result = getMapCoordinates(event);
+
     if (!result) return;
 
     const { map, pixel } = result;
+
     const current = map.unproject(pixel);
 
     const drag = dragRef.current;
+
     const newRing = drag.originalRing.map(position => [
       ...position
     ]);
 
     if (drag.type === "vertex") {
+
       const index = drag.vertexIndex;
 
-      newRing[index] = [current.lng, current.lat];
+      newRing[index] = [
+        current.lng,
+        current.lat
+      ];
 
+      // Keep polygon closed
       if (index === 0) {
         newRing[newRing.length - 1] = [
           current.lng,
           current.lat
         ];
       }
+
     }
 
     if (drag.type === "polygon") {
+
       const deltaLng =
         current.lng - drag.startCoordinate[0];
 
@@ -204,8 +244,10 @@ function FarmMap() {
           drag.originalRing[i][1] + deltaLat
         ];
       }
+
     }
 
+    // Send updated boundary to App.jsx
     setFarmData(previous => ({
       ...previous,
       features: previous.features.map((feature, index) =>
@@ -222,6 +264,7 @@ function FarmMap() {
     }));
   }
 
+  // Finish dragging
   function handlePointerUp(event) {
     if (!dragRef.current) return;
 
@@ -232,9 +275,12 @@ function FarmMap() {
     }
 
     dragRef.current = null;
+
     setIsDragging(false);
 
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+    if (
+      event.currentTarget.hasPointerCapture(event.pointerId)
+    ) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
   }
@@ -248,11 +294,14 @@ function FarmMap() {
         overflow: "hidden",
         cursor: isDragging ? "grabbing" : "default"
       }}
+
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
     >
+
+      {/* Map and Deck.gl layers */}
       <DeckGL
         initialViewState={INITIAL_VIEW_STATE}
         controller={!isDragging}
@@ -277,6 +326,7 @@ function FarmMap() {
         />
       </DeckGL>
 
+      {/* Editing instructions */}
       <div
         style={{
           position: "absolute",
@@ -295,6 +345,7 @@ function FarmMap() {
         <p>Drag a white corner to reshape it.</p>
       </div>
 
+      {/* Dynamic farm information */}
       {selectedFarm && (
         <div
           style={{
@@ -310,7 +361,7 @@ function FarmMap() {
           }}
         >
           <button
-            onClick={() => setSelectedFarm(null)}
+            onClick={() => setSelectedFarm(false)}
             style={{
               float: "right",
               border: "none",
@@ -323,11 +374,34 @@ function FarmMap() {
           </button>
 
           <h3>Farm Information</h3>
-          <p><strong>Name:</strong> {selectedFarm.name}</p>
-          <p><strong>Area:</strong> {selectedFarm.acreage} Acres</p>
-          <p><strong>Status:</strong> {selectedFarm.status}</p>
+
+          <p>
+            <strong>Name:</strong>{" "}
+            {farmData.features[0].properties.name}
+          </p>
+
+          <p>
+            <strong>Area:</strong>{" "}
+            {acreage.toFixed(2)} Acres
+          </p>
+
+          <p>
+            <strong>Latitude:</strong>{" "}
+            {centerLatitude.toFixed(6)}
+          </p>
+
+          <p>
+            <strong>Longitude:</strong>{" "}
+            {centerLongitude.toFixed(6)}
+          </p>
+
+          <p>
+            <strong>Status:</strong>{" "}
+            {farmData.features[0].properties.status}
+          </p>
         </div>
       )}
+
     </div>
   );
 }
